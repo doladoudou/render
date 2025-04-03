@@ -1,7 +1,7 @@
 import os
 from fastapi import FastAPI, Request, Form
-from fastapi import Request 
 from fastapi.templating import Jinja2Templates
+from fastapi.responses import HTMLResponse  # <- Import HTMLResponse
 from pydantic import BaseModel
 
 # LangChain imports
