@@ -149,13 +149,6 @@ def ask_mentor(user_input: UserInput):
 
     return {"response": response}
 
-# 10) Run the FastAPI server (`uvicorn app:app --reload`, if called directly, e.g., `python app.py`)
-#     and open this website: http://127.0.0.1:8000/docs
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
-
-
 # frontend
 @app.get("/", response_class=HTMLResponse)
 def form_get(request: Request):
@@ -171,3 +164,8 @@ async def form_post(request: Request):
     response = chain.run(user_input=message)
 
     return templates.TemplateResponse("form.html", {"request": request, "response": response})
+
+# 10) Run the FastAPI server ...
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000)
