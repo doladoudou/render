@@ -1,3 +1,10 @@
+from fastapi.responses import HTMLResponse
+from fastapi.requests import Request
+from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
+
+templates = Jinja2Templates(directory="templates")
+
 import os
 from fastapi import FastAPI
 from pydantic import BaseModel
@@ -147,3 +154,20 @@ def ask_mentor(user_input: UserInput):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
+
+# frontend
+@app.get("/", response_class=HTMLResponse)
+def form_get(request: Request):
+    return templates.TemplateResponse("form.html", {"request": request})
+
+@app.post("/", response_class=HTMLResponse)
+async def form_post(request: Request):
+    form = await request.form()
+    message = form["message"]
+
+    memory = get_session_memory("default_session")
+    chain = LLMChain(llm=llm, prompt=chat_prompt, memory=memory, verbose=False)
+    response = chain.run(user_input=message)
+
+    return templates.TemplateResponse("form.html", {"request": request, "response": response})

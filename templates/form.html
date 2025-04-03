@@ -1,0 +1,24 @@
+<!-- templates/form.html -->
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Ask Your Team Mentor</title>
+  <style>
+    body { font-family: Arial; padding: 2em; background: #f7f7f7; }
+    form { background: white; padding: 2em; border-radius: 8px; max-width: 500px; margin: auto; }
+    textarea { width: 100%; height: 100px; margin-bottom: 1em; }
+    button { padding: 0.5em 1em; }
+  </style>
+</head>
+<body>
+  <h2>Ask Your Team Mentor</h2>
+  <form method="post">
+    <textarea name="message" placeholder="Enter your question here..."></textarea><br>
+    <button type="submit">Send</button>
+  </form>
+  {% if response %}
+    <h3>Response:</h3>
+    <p>{{ response }}</p>
+  {% endif %}
+</body>
+</html>
