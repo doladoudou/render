@@ -3,3 +3,4 @@ uvicorn
 langchain-community
 langchain-openai
 openai
+jinja2
