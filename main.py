@@ -101,19 +101,28 @@ def form_get(request: Request):
 
 @app.post("/", response_class=HTMLResponse)
 async def form_post(request: Request):
-    form = await request.form()
-    message = form["message"]
+    try:
+        form = await request.form()
+        message = form["message"]
 
-    memory = get_session_memory("default_session")
-    chain = LLMChain(llm=llm, prompt=chat_prompt, memory=memory)
-    response = chain.run(user_input=message)
+        memory = get_session_memory("default_session")
+        chain = LLMChain(llm=llm, prompt=chat_prompt, memory=memory)
+        response = chain.run(user_input=message)
 
-    return templates.TemplateResponse("form.html", {
-        "request": request,
-        "response": response
-    })
+        return templates.TemplateResponse("form.html", {
+            "request": request,
+            "response": response
+        })
+    except Exception as e:
+        # Show the actual error on the web page
+        return templates.TemplateResponse("form.html", {
+            "request": request,
+            "response": f"❌ Internal Server Error: {str(e)}"
+        })
 
-# Local dev only
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    import os
+    
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
