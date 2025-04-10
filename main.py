@@ -97,7 +97,11 @@ def ask_mentor(user_input: UserInput):
 # HTML UI routes
 @app.get("/", response_class=HTMLResponse)
 def form_get(request: Request):
-    return templates.TemplateResponse("form.html", {"request": request})
+    return templates.TemplateResponse("form.html", {
+        "request": request,
+        "message": None,
+        "response": None
+    })
 
 @app.post("/", response_class=HTMLResponse)
 async def form_post(request: Request):
@@ -119,13 +123,15 @@ async def form_post(request: Request):
 
         return templates.TemplateResponse("form.html", {
             "request": request,
-            "response": response
+            "response": response,
+            "message": message
         })
     except Exception as e:
         # Show the actual error on the web page
         return templates.TemplateResponse("form.html", {
             "request": request,
-            "response": f"❌ Internal Server Error: {str(e)}"
+            "response": f"❌ Internal Server Error: {str(e)}",
+            "message": message
         })
 
 if __name__ == "__main__":

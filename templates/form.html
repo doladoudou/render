@@ -22,7 +22,7 @@
 <body>
   <h2>Ask Your Team Mentor</h2>
   <form method="post">
-    <textarea name="message" placeholder="Describe your team issue here...">{{ message or '' }}</textarea><br>
+    <textarea name="message" placeholder="Describe your team issue here...">{{ message }}</textarea>
     <button type="submit">Submit</button>
   </form>
   {% if response %}
