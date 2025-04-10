@@ -120,6 +120,7 @@ async def form_post(request: Request):
                         .replace("Step 4:", "<h3>Step 4:</h3>") \
                         .replace("Step 5:", "<h3>Step 5:</h3>") \
                         .replace("\n", "<br>")
+        response = re.sub(r"\*\*(.*?)\*\*", r"<strong>\1</strong>", response)
 
         return templates.TemplateResponse("form.html", {
             "request": request,
