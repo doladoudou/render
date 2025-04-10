@@ -20,7 +20,7 @@
   {% if response %}
     <div class="response">
       <h3>Response:</h3>
-      <p>{{ response }}</p>
+      <div>{{ response | safe }}</div>
     </div>
   {% endif %}
 </body>

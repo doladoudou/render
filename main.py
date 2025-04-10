@@ -109,6 +109,14 @@ async def form_post(request: Request):
         chain = LLMChain(llm=llm, prompt=chat_prompt, memory=memory)
         response = chain.run(user_input=message)
 
+        # Format response for HTML readability
+        response = response.replace("Step 1:", "<h3>Step 1:</h3>") \
+                        .replace("Step 2:", "<h3>Step 2:</h3>") \
+                        .replace("Step 3:", "<h3>Step 3:</h3>") \
+                        .replace("Step 4:", "<h3>Step 4:</h3>") \
+                        .replace("Step 5:", "<h3>Step 5:</h3>") \
+                        .replace("\n", "<br>")
+
         return templates.TemplateResponse("form.html", {
             "request": request,
             "response": response
