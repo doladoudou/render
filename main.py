@@ -14,6 +14,7 @@ from langchain.prompts.chat import (
 )
 from langchain.memory import ConversationSummaryBufferMemory
 from langchain.chains import LLMChain
+import re
 
 # Load OpenAI key
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
