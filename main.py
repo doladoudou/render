@@ -1,7 +1,10 @@
 import os
+import pandas as pd
+import re
+import numpy as np
 from fastapi import FastAPI, Request, Form
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import HTMLResponse  # <- Import HTMLResponse
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 
 # LangChain imports
@@ -14,25 +17,92 @@ from langchain.prompts.chat import (
 )
 from langchain.memory import ConversationSummaryBufferMemory
 from langchain.chains import LLMChain
-import re
 
-# Load OpenAI key
+from sentence_transformers import SentenceTransformer
+from sklearn.cluster import AgglomerativeClustering
+from keras.models import Sequential
+from keras.layers import Dense, Dropout
+from keras.utils import to_categorical
+from keras.callbacks import EarlyStopping
+from keras.optimizers import Adam
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import accuracy_score
+
+import nltk
+from nltk.corpus import stopwords
+from nltk.stem import WordNetLemmatizer
+nltk.download('stopwords')
+nltk.download('wordnet')
+
+# Load data and prepare predictive model
+data = pd.read_csv("/mnt/data/data.csv")
+stop_words = set(stopwords.words('english'))
+lemmatizer = WordNetLemmatizer()
+
+def preprocess_text(text):
+    if pd.isnull(text):
+        return ''
+    text = text.lower()
+    text = re.sub(r'[^a-zA-Z\s]', '', text)
+    tokens = text.split()
+    tokens = [lemmatizer.lemmatize(word) for word in tokens if word not in stop_words]
+    return ' '.join(tokens)
+
+data['Processed_Goal'] = data['Goal'].fillna('').apply(preprocess_text)
+model_name = 'all-MiniLM-L6-v2'
+sentence_model = SentenceTransformer(model_name)
+embeddings = sentence_model.encode(data['Processed_Goal'].tolist())
+
+categories = [
+    'Grade Oriented', 'Completion Oriented', 'Problem-focused', 'Teaming Oriented',
+    'Learning Oriented', 'Outcome-focused', 'Output-focused - Specific',
+    'Output-focused - General', 'No Goal', 'non-response'
+]
+
+n_clusters = len(categories)
+clustering_model = AgglomerativeClustering(n_clusters=n_clusters, linkage='ward')
+data['Cluster'] = clustering_model.fit_predict(embeddings)
+data['Cluster_Feature'] = data['Cluster']
+data['Original_Category'] = data[categories].idxmax(axis=1)
+category_mapping = {category: i for i, category in enumerate(categories)}
+data['Target'] = data['Original_Category'].map(category_mapping)
+
+X = np.hstack((embeddings, data[['Cluster_Feature']].values.reshape(-1, 1)))
+y = to_categorical(data['Target'].values, num_classes=n_clusters)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+model = Sequential([
+    Dense(128, activation='relu', input_shape=(X_train.shape[1],)),
+    Dropout(0.3),
+    Dense(64, activation='relu'),
+    Dropout(0.3),
+    Dense(n_clusters, activation='softmax')
+])
+model.compile(optimizer=Adam(learning_rate=0.001), loss='categorical_crossentropy', metrics=['accuracy'])
+model.fit(X_train, y_train, epochs=20, batch_size=32, validation_data=(X_test, y_test), verbose=0,
+          callbacks=[EarlyStopping(monitor='val_loss', patience=3, restore_best_weights=True)])
+
+full_predictions = model.predict(X)
+data['Predicted_Category'] = np.argmax(full_predictions, axis=1)
+data['Predicted_Category'] = data['Predicted_Category'].map({v: k for k, v in category_mapping.items()})
+
+# Prepare lookup dictionary
+student_info = data.set_index("StudentID").to_dict(orient="index")
+
+# App
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 if not OPENAI_API_KEY:
     raise ValueError("Missing OpenAI API key! Set OPENAI_API_KEY as an environment variable.")
 
-# Initialize app and templates
 app = FastAPI()
 templates = Jinja2Templates(directory="templates")
 
-# Instantiate LLM
 llm = ChatOpenAI(
     openai_api_key=OPENAI_API_KEY,
     model="gpt-3.5-turbo",
     temperature=0
 )
 
-# Session memory
 session_memory = {}
 def get_session_memory(session_id: str):
     if session_id not in session_memory:
@@ -42,101 +112,67 @@ def get_session_memory(session_id: str):
         )
     return session_memory[session_id]
 
-# System prompt
-# system_message = SystemMessagePromptTemplate.from_template("""
-# You are a teaming mentor specializing in helping students improve collaboration.
-# You remember past interactions and adapt advice accordingly. Your goal is to identify team issues, diagnose causes, and offer precise, actionable solutions.
-
-# Response Framework
-# Step 1: Identify the Student's Concern
-# - Determine the exact issue they face (e.g., unresponsive teammates, conflict, unclear goals).
-# - If unclear, ask follow-up questions instead of assuming.
-
-# Step 2: Break the Issue into Key Components
-# - Consider communication breakdown, task division, motivation, leadership, or conflict resolution.
-# - Pinpoint the root cause instead of just symptoms.
-
-# Step 3: Diagnose the Problem
-# - Use logical reasoning to analyze why the issue exists.
-# - Consider factors like team expectations, unclear roles, or external pressures.
-
-# Step 4: Provide a Targeted Action Plan
-# - Offer specific steps the student can take (e.g., how to structure a team meeting, how to word a message to a teammate).
-# - If applicable, provide a sample conversation template they can send to teammates.
-# - Encourage reflection: Prompt the student to consider their own contributions.
-
-# Step 5: Follow-up and Adjustment
-# - If the issue is complex, suggest follow-up questions before finalizing advice.
-# - If the student has already taken action, adapt guidance based on what they tried before.
-
-# Tone and Interaction Rules
-# - Be concise yet detailed (avoid generic advice).
-# - Use clear, structured steps rather than long paragraphs.
-# - Keep a mentor-like, constructive tone (supportive but practical).
-# - If conflict arises, guide them toward structured conflict resolution techniques (e.g., setting boundaries, mediating discussions).
-# - For motivation issues, suggest small, immediate actions to build momentum.
-# """)
 system_message = SystemMessagePromptTemplate.from_template("""
-You are a thoughtful and supportive teaming mentor who helps students navigate team issues with empathy and practical, detailed advice.
-You remember past interactions and adapt advice accordingly. Your goal is to identify team issues, diagnose causes, and offer useful, actionable solutions.
+You are a teaming mentor who gives thoughtful, context-aware advice. 
+This student is from the class: {class_name}, in team: {team_id}, working on project: {project_name}. 
+The team’s goal orientation is predicted to be: {goal_category}.
 
-Respond naturally — like you're writing a caring, insightful message to a student who just reached out for help. Avoid rigid templates or step-by-step labels unless specifically requested.
-
-Your goals in details:
-- Fully understand what the student is struggling with
-- Provide detailed, realistic, and specific guidance
-- Offer next steps they can actually try, including example messages or scripts if helpful
-- Stay warm, encouraging, and professional — like a trusted TA or professor
-- Gently prompt self-reflection when appropriate
-- Use clear formatting (e.g., short paragraphs, bolding important points) to make responses easy to read
-
-Avoid using numbered steps or robotic formatting unless it helps clarity. Focus on giving useful advice that feels personal and actionable.
+Use this information to give personalized support that reflects their background and likely teaming dynamics. 
+Avoid generic advice — be realistic, supportive, and specific. Anticipate underlying issues from goal mismatches.
 """)
 
-# Chat prompt
 chat_prompt = ChatPromptTemplate.from_messages([
     system_message,
     MessagesPlaceholder(variable_name="history"),
     HumanMessagePromptTemplate.from_template("{user_input}")
 ])
 
-# API endpoint
 class UserInput(BaseModel):
+    student_id: str
     message: str
 
 @app.post("/ask")
 def ask_mentor(user_input: UserInput):
-    memory = get_session_memory("default_session")
+    student = student_info.get(user_input.student_id)
+    if not student:
+        return {"response": "❌ Student not found. Please check the ID."}
+
+    memory = get_session_memory(user_input.student_id)
     chain = LLMChain(llm=llm, prompt=chat_prompt, memory=memory)
-    response = chain.run(user_input=user_input.message)
+    response = chain.run(user_input=user_input.message,
+                         class_name=student['Class'],
+                         team_id=student['TeamID'],
+                         project_name=student['Project'],
+                         goal_category=student['Predicted_Category'])
     return {"response": response}
 
-# HTML UI routes
 @app.get("/", response_class=HTMLResponse)
 def form_get(request: Request):
-    return templates.TemplateResponse("form.html", {
-        "request": request,
-        "message": None,
-        "response": None
-    })
+    return templates.TemplateResponse("form.html", {"request": request, "message": None, "response": None})
 
 @app.post("/", response_class=HTMLResponse)
 async def form_post(request: Request):
     try:
         form = await request.form()
         message = form["message"]
+        student_id = form["student_id"]
+        student = student_info.get(student_id)
 
-        memory = get_session_memory("default_session")
+        if not student:
+            return templates.TemplateResponse("form.html", {
+                "request": request,
+                "response": f"❌ Student not found.",
+                "message": message
+            })
+
+        memory = get_session_memory(student_id)
         chain = LLMChain(llm=llm, prompt=chat_prompt, memory=memory)
-        response = chain.run(user_input=message)
-
-        # Format response for HTML readability
-        response = response.replace("Step 1:", "<h3>Step 1:</h3>") \
-                        .replace("Step 2:", "<h3>Step 2:</h3>") \
-                        .replace("Step 3:", "<h3>Step 3:</h3>") \
-                        .replace("Step 4:", "<h3>Step 4:</h3>") \
-                        .replace("Step 5:", "<h3>Step 5:</h3>") \
-                        .replace("\n", "<br>")
+        response = chain.run(user_input=message,
+                             class_name=student['Class'],
+                             team_id=student['TeamID'],
+                             project_name=student['Project'],
+                             goal_category=student['Predicted_Category'])
+        response = response.replace("\n", "<br>")
         response = re.sub(r"\*\*(.*?)\*\*", r"<strong>\1</strong>", response)
 
         return templates.TemplateResponse("form.html", {
@@ -145,7 +181,6 @@ async def form_post(request: Request):
             "message": message
         })
     except Exception as e:
-        # Show the actual error on the web page
         return templates.TemplateResponse("form.html", {
             "request": request,
             "response": f"❌ Internal Server Error: {str(e)}",
@@ -154,7 +189,5 @@ async def form_post(request: Request):
 
 if __name__ == "__main__":
     import uvicorn
-    import os
-    
     port = int(os.environ.get("PORT", 8000))
     uvicorn.run(app, host="0.0.0.0", port=port)
