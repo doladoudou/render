@@ -1,11 +1,12 @@
 fastapi
 uvicorn
-pandas
+pandas>=2.0
 numpy
 scikit-learn
 nltk
 sentence-transformers
 openai
-langchain
+langchain>=0.1.0
+langchain-openai>=0.1.0
 jinja2
 tensorflow
