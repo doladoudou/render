@@ -1,7 +1,11 @@
 fastapi
 uvicorn
-langchain-community
-langchain-openai
+pandas
+numpy
+scikit-learn
+nltk
+sentence-transformers
 openai
+langchain
 jinja2
-python-multipart
+tensorflow
