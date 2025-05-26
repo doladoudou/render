@@ -1,3 +1,6 @@
+from dotenv import load_dotenv
+load_dotenv()
+
 import os
 import re
 from fastapi import FastAPI, Request
@@ -14,7 +17,7 @@ from langchain.prompts.chat import (
 from langchain.chains import LLMChain
 from langchain.memory import ConversationSummaryBufferMemory
 
-app = FastAPI()
+app = FastAPI(debug=True)
 templates = Jinja2Templates(directory="templates")
 
 # Few-shot exemplar for depth and specificity
@@ -71,7 +74,8 @@ async def ask_mentor(payload: AskRequest):
     prompt = ChatPromptTemplate.from_messages([context_block] + chat_template_base)
 
     # Conversation memory (summary buffer)
-    memory = ConversationSummaryBufferMemory(memory_key="history", return_messages=True)
+    memory = ConversationSummaryBufferMemory(llm=llm,memory_key="history",return_messages=True)
+
     chain = LLMChain(llm=llm, prompt=prompt, memory=memory)
 
     # Run the chain
